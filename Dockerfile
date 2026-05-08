@@ -21,13 +21,12 @@ FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS build
 ARG FFMPEG_VERSION=n7.1.1
 ARG VMAF_VERSION=v3.0.0
 ARG NV_CODEC_VERSION=n12.2.72.0
-# RTX 4060 = sm_89 (Ada). Cover Turing/Ampere/Ada/Hopper plus PTX forward-compat.
-ARG NVCC_GENCODE="\
--gencode arch=compute_75,code=sm_75 \
--gencode arch=compute_86,code=sm_86 \
--gencode arch=compute_89,code=sm_89 \
--gencode arch=compute_90,code=sm_90 \
--gencode arch=compute_89,code=compute_89"
+# Single PTX-virtual gencode: ffmpeg's configure runs `nvcc -ptx ...` to test
+# cuda_nvcc support, and -ptx is incompatible with multiple gencode targets
+# ("nvcc fatal: '--ptx' is not allowed when compiling for multiple GPU architectures").
+# compute_75 PTX JIT-compiles at runtime to any GPU >= Turing — covers RTX 4060
+# (sm_89) and beyond.
+ARG NVCC_GENCODE="-gencode arch=compute_75,code=compute_75"
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/usr/local/cuda/bin:${PATH}"
@@ -76,7 +75,7 @@ RUN git clone --depth 1 --branch ${FFMPEG_VERSION} \
        ./configure \
             --prefix=/opt/ffmpeg \
             --extra-cflags="-I/usr/local/cuda/include -I/usr/local/include" \
-            --extra-ldflags="-L/usr/local/cuda/lib64 -L/usr/local/lib -Wl,-rpath,/opt/ffmpeg/lib:/usr/local/lib" \
+            --extra-ldflags="-L/usr/local/cuda/lib64 -L/usr/local/cuda/lib64/stubs -L/usr/local/lib -Wl,-rpath,/opt/ffmpeg/lib:/usr/local/lib" \
             --enable-gpl \
             --enable-version3 \
             --enable-nonfree \
