@@ -8,7 +8,7 @@ and CUDA-accelerated VMAF scoring. Built for the FileFlows AV1/VMAF pipeline at
 
 | Component         | Version       |
 |-------------------|---------------|
-| ffmpeg            | `n7.1.1`      |
+| ffmpeg            | `n8.1.1`      |
 | libvmaf           | `v3.1.0`      |
 | nv-codec-headers  | `33a9ede8` (post-n13.0.19.0) |
 | CUDA base image   | `12.6.0`      |
@@ -71,7 +71,7 @@ Override versions via build args:
 
 ```bash
 docker build \
-    --build-arg FFMPEG_VERSION=n7.1.1 \
+    --build-arg FFMPEG_VERSION=n8.1.1 \
     --build-arg VMAF_VERSION=v3.1.0 \
     --build-arg NV_CODEC_VERSION=33a9ede8d9914299d9262539c576a15bd0a19621 \
     -t ffmpeg-vmaf-cuda:dev .

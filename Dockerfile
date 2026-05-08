@@ -18,7 +18,7 @@ ARG UBUNTU_VERSION=24.04
 ############################################################
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS build
 
-ARG FFMPEG_VERSION=n7.1.1
+ARG FFMPEG_VERSION=n8.1.1
 ARG VMAF_VERSION=v3.1.0
 # nv-codec-headers: pinned to a specific commit (rather than a tag) because
 # libvmaf 3.1.0 needs CudaFunctions members (cuCtxSynchronize, cuMemHostAlloc,
