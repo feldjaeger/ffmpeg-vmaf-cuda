@@ -18,8 +18,11 @@ Encoders/decoders enabled: `av1_nvenc`, `hevc_nvenc`, `h264_nvenc`,
 `av1_cuvid`, `hevc_cuvid`, `h264_cuvid`, plus libx264, libx265, libsvtav1,
 libdav1d, libopus.
 
-GPL build — no `--enable-nonfree`, no libnpp, no libfdk-aac. Audio is always
-copy-passthrough in the FileFlows pipeline so libfdk-aac is unneeded.
+Built with `--enable-gpl --enable-version3 --enable-nonfree`. The nonfree
+flag is required because `--enable-cuda-nvcc` (closed-source NVIDIA
+compiler) is gated on it — without it ffmpeg's configure refuses. libnpp
+and libfdk-aac are still omitted; libfdk-aac in particular is unneeded
+because audio is always copy-passthrough in the FileFlows pipeline.
 
 NVCC gencode covers Turing (sm_75), Ampere (sm_86), Ada (sm_89) and Hopper
 (sm_90) plus a `compute_89` PTX for forward compat.
@@ -93,5 +96,17 @@ FileFlows image.
 
 ## License
 
-GPLv3 (because of x264/x265 + ffmpeg `--enable-gpl --enable-version3`).
-The image is freely redistributable under those terms.
+GPLv3 (x264/x265 + ffmpeg `--enable-gpl --enable-version3`) **plus
+nonfree** (`--enable-cuda-nvcc` → ffmpeg's configure refuses without
+`--enable-nonfree`). This combination is **not redistributable** under
+GPL terms. In practice that means:
+
+- Build the image yourself, or pull from a registry that's effectively
+  for personal use.
+- Don't ship this image as part of a product or to third parties.
+- The Dockerfile and CI workflow themselves are unencumbered — only the
+  resulting binary inherits the nonfree restriction.
+
+If license-clean redistribution matters, swap `--enable-cuda-nvcc` for
+`--enable-cuda-llvm` (uses Clang instead of nvcc; needs a clang+CUDA
+toolchain matrix that compiles cleanly).

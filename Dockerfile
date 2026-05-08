@@ -1,8 +1,14 @@
 # syntax=docker/dockerfile:1.7
 #
 # Multi-stage build for ffmpeg with libvmaf_cuda + NVENC/NVDEC.
-# GPL build (no --enable-nonfree) — safe for public redistribution.
-# Audio is always copied in the FileFlows pipeline, so libfdk-aac is intentionally omitted.
+#
+# Licensing: GPL + nonfree. --enable-cuda-nvcc requires --enable-nonfree
+# because nvcc is closed-source. The resulting binary may NOT be
+# redistributed under GPL terms. Build it yourself or pull from a
+# private/personal-use registry.
+#
+# libfdk-aac is still omitted — audio is always copied in the FileFlows
+# pipeline, so we don't need an additional nonfree audio encoder.
 
 ARG CUDA_VERSION=12.6.0
 ARG UBUNTU_VERSION=24.04
@@ -73,6 +79,7 @@ RUN git clone --depth 1 --branch ${FFMPEG_VERSION} \
             --extra-ldflags="-L/usr/local/cuda/lib64 -L/usr/local/lib -Wl,-rpath,/opt/ffmpeg/lib:/usr/local/lib" \
             --enable-gpl \
             --enable-version3 \
+            --enable-nonfree \
             --enable-libvmaf \
             --enable-cuda-nvcc \
             --enable-cuvid \
@@ -126,7 +133,7 @@ ENV PATH="/usr/local/bin:${PATH}"
 
 LABEL org.opencontainers.image.source="https://github.com/feldjaeger/ffmpeg-vmaf-cuda"
 LABEL org.opencontainers.image.description="ffmpeg with libvmaf_cuda + NVENC, GPL build"
-LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later AND LicenseRef-ffmpeg-nonfree"
 
 ENTRYPOINT ["/usr/local/bin/ffmpeg"]
 CMD ["-version"]
