@@ -30,6 +30,7 @@ ARG NVCC_GENCODE="-gencode arch=compute_75,code=compute_75"
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PATH="/usr/local/cuda/bin:${PATH}"
+ENV PKG_CONFIG_PATH="/usr/local/lib/pkgconfig"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git ca-certificates curl pkg-config build-essential \
@@ -40,6 +41,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
+
+# The CUDA stubs dir ships libcuda.so but not the libcuda.so.1 soname that
+# downstream libraries (libvmaf with CUDA backend) record in DT_NEEDED.
+# Without this symlink, ld can't resolve transitive deps when ffmpeg's
+# configure links a test binary against libvmaf -> "undefined reference to
+# cuModuleLoadData" etc., which surfaces as a misleading
+# "libvmaf >= 2.0.0 not found using pkg-config" error. The stub satisfies
+# the link only — at runtime the host driver provides the real libcuda.so.1
+# via the NVIDIA Container Runtime.
+RUN ln -sf libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1
 
 # NVENC/NVDEC headers
 RUN git clone --depth 1 --branch ${NV_CODEC_VERSION} \
@@ -69,10 +80,9 @@ RUN mkdir -p /usr/local/share/vmaf/model \
 
 # ffmpeg
 RUN git clone --depth 1 --branch ${FFMPEG_VERSION} \
-        https://git.ffmpeg.org/ffmpeg.git ffmpeg \
+        https://github.com/FFmpeg/FFmpeg.git ffmpeg \
     && cd ffmpeg \
-    && PKG_CONFIG_PATH="/usr/local/lib/pkgconfig" \
-       ./configure \
+    && ./configure \
             --prefix=/opt/ffmpeg \
             --extra-cflags="-I/usr/local/cuda/include -I/usr/local/include" \
             --extra-ldflags="-L/usr/local/cuda/lib64 -L/usr/local/cuda/lib64/stubs -L/usr/local/lib -Wl,-rpath,/opt/ffmpeg/lib:/usr/local/lib" \
