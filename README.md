@@ -73,7 +73,7 @@ Override versions via build args:
 docker build \
     --build-arg FFMPEG_VERSION=n7.1.1 \
     --build-arg VMAF_VERSION=v3.1.0 \
-    --build-arg NV_CODEC_VERSION=33a9ede8d991ffd96c5b62c9d11c1d65d31df4a2 \
+    --build-arg NV_CODEC_VERSION=33a9ede8d9914299d9262539c576a15bd0a19621 \
     -t ffmpeg-vmaf-cuda:dev .
 ```
 

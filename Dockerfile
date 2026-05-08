@@ -28,7 +28,7 @@ ARG VMAF_VERSION=v3.1.0
 #   876af32a 2025-09-02  add a few missing functions
 #   33a9ede8 2026-03-17  Add full set of cuMemsetAsync family of functions
 # We pin to the latter (latest at time of writing) for reproducibility.
-ARG NV_CODEC_VERSION=33a9ede8d991ffd96c5b62c9d11c1d65d31df4a2
+ARG NV_CODEC_VERSION=33a9ede8d9914299d9262539c576a15bd0a19621
 # Single PTX-virtual gencode: ffmpeg's configure runs `nvcc -ptx ...` to test
 # cuda_nvcc support, and -ptx is incompatible with multiple gencode targets
 # ("nvcc fatal: '--ptx' is not allowed when compiling for multiple GPU architectures").
