@@ -79,10 +79,21 @@ RUN mkdir -p /usr/local/share/vmaf/model \
     && cp -r /src/vmaf/model/* /usr/local/share/vmaf/model/
 
 # ffmpeg
+#
+# Diagnostic: pkg-config sanity-check libvmaf BEFORE ffmpeg configure.
+# Then on configure failure we dump the relevant tail of ffbuild/config.log
+# so CI logs show the actual link error instead of the misleading
+# "libvmaf >= 2.0.0 not found using pkg-config".
 RUN git clone --depth 1 --branch ${FFMPEG_VERSION} \
         https://github.com/FFmpeg/FFmpeg.git ffmpeg \
     && cd ffmpeg \
-    && ./configure \
+    && echo "=== pkg-config probe ===" \
+    && pkg-config --exists --print-errors 'libvmaf >= 2.0.0' \
+    && echo "libvmaf cflags: $(pkg-config --cflags libvmaf)" \
+    && echo "libvmaf libs:   $(pkg-config --libs libvmaf)" \
+    && echo "libvmaf libs.private: $(pkg-config --libs --static libvmaf)" \
+    && ls -l /usr/local/cuda/lib64/stubs/ \
+    && (./configure \
             --prefix=/opt/ffmpeg \
             --extra-cflags="-I/usr/local/cuda/include -I/usr/local/include" \
             --extra-ldflags="-L/usr/local/cuda/lib64 -L/usr/local/cuda/lib64/stubs -L/usr/local/lib -Wl,-rpath,/opt/ffmpeg/lib:/usr/local/lib" \
@@ -100,6 +111,9 @@ RUN git clone --depth 1 --branch ${FFMPEG_VERSION} \
             --enable-libdav1d \
             --enable-libopus \
             --nvccflags="${NVCC_GENCODE}" \
+        || (echo "=== ffbuild/config.log (last 250 lines) ==="; \
+            tail -n 250 ffbuild/config.log; \
+            exit 1)) \
     && make -j"$(nproc)" \
     && make install
 
