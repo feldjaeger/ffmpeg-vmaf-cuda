@@ -20,7 +20,15 @@ FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS build
 
 ARG FFMPEG_VERSION=n7.1.1
 ARG VMAF_VERSION=v3.1.0
-ARG NV_CODEC_VERSION=n13.0.19.0
+# nv-codec-headers: pinned to a specific commit (rather than a tag) because
+# libvmaf 3.1.0 needs CudaFunctions members (cuCtxSynchronize, cuMemHostAlloc,
+# cuMemFreeHost, cuCtxGetStreamPriorityRange, cuStreamCreateWithPriority,
+# cuMemAllocAsync, cuMemFreeAsync, cuMemset*Async family, ...) that aren't in
+# the latest tag n13.0.19.0. They were added on master in:
+#   876af32a 2025-09-02  add a few missing functions
+#   33a9ede8 2026-03-17  Add full set of cuMemsetAsync family of functions
+# We pin to the latter (latest at time of writing) for reproducibility.
+ARG NV_CODEC_VERSION=33a9ede8d991ffd96c5b62c9d11c1d65d31df4a2
 # Single PTX-virtual gencode: ffmpeg's configure runs `nvcc -ptx ...` to test
 # cuda_nvcc support, and -ptx is incompatible with multiple gencode targets
 # ("nvcc fatal: '--ptx' is not allowed when compiling for multiple GPU architectures").
@@ -57,9 +65,9 @@ WORKDIR /src
 # searched by ld for DT_NEEDED transitive lookup — only -rpath-link is.
 RUN ln -sf libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1
 
-# NVENC/NVDEC headers
-RUN git clone --depth 1 --branch ${NV_CODEC_VERSION} \
-        https://github.com/FFmpeg/nv-codec-headers.git \
+# NVENC/NVDEC headers — full clone since we pin to a SHA, not a tag/branch.
+RUN git clone https://github.com/FFmpeg/nv-codec-headers.git \
+    && git -C nv-codec-headers checkout ${NV_CODEC_VERSION} \
     && make -C nv-codec-headers PREFIX=/usr/local install
 
 # libvmaf with CUDA backend
