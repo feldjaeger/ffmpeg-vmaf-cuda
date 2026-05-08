@@ -1,0 +1,132 @@
+# syntax=docker/dockerfile:1.7
+#
+# Multi-stage build for ffmpeg with libvmaf_cuda + NVENC/NVDEC.
+# GPL build (no --enable-nonfree) — safe for public redistribution.
+# Audio is always copied in the FileFlows pipeline, so libfdk-aac is intentionally omitted.
+
+ARG CUDA_VERSION=12.6.0
+ARG UBUNTU_VERSION=24.04
+
+############################################################
+# Stage 1: build
+############################################################
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS build
+
+ARG FFMPEG_VERSION=n7.1.1
+ARG VMAF_VERSION=v3.0.0
+ARG NV_CODEC_VERSION=n12.2.72.0
+# RTX 4060 = sm_89 (Ada). Cover Turing/Ampere/Ada/Hopper plus PTX forward-compat.
+ARG NVCC_GENCODE="\
+-gencode arch=compute_75,code=sm_75 \
+-gencode arch=compute_86,code=sm_86 \
+-gencode arch=compute_89,code=sm_89 \
+-gencode arch=compute_90,code=sm_90 \
+-gencode arch=compute_89,code=compute_89"
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PATH="/usr/local/cuda/bin:${PATH}"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        git ca-certificates curl pkg-config build-essential \
+        nasm yasm cmake meson ninja-build python3 python3-pip xxd \
+        libx264-dev libx265-dev libsvtav1-dev libsvtav1enc-dev \
+        libopus-dev libdav1d-dev libnuma-dev libssl-dev \
+        libtool autoconf automake \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+# NVENC/NVDEC headers
+RUN git clone --depth 1 --branch ${NV_CODEC_VERSION} \
+        https://github.com/FFmpeg/nv-codec-headers.git \
+    && make -C nv-codec-headers PREFIX=/usr/local install
+
+# libvmaf with CUDA backend
+RUN git clone --depth 1 --branch ${VMAF_VERSION} \
+        https://github.com/Netflix/vmaf.git \
+    && cd vmaf/libvmaf \
+    && meson setup build \
+            --buildtype=release \
+            --prefix=/usr/local \
+            --libdir=lib \
+            -Denable_cuda=true \
+            -Denable_avx512=true \
+            -Denable_float=true \
+            -Dbuilt_in_models=true \
+    && ninja -vC build \
+    && ninja -C build install \
+    && ldconfig
+
+# Ship VMAF models on disk too (libvmaf has built-in models, but path-loaded
+# variants are useful for benchmarking custom models).
+RUN mkdir -p /usr/local/share/vmaf/model \
+    && cp -r /src/vmaf/model/* /usr/local/share/vmaf/model/
+
+# ffmpeg
+RUN git clone --depth 1 --branch ${FFMPEG_VERSION} \
+        https://git.ffmpeg.org/ffmpeg.git ffmpeg \
+    && cd ffmpeg \
+    && PKG_CONFIG_PATH="/usr/local/lib/pkgconfig" \
+       ./configure \
+            --prefix=/opt/ffmpeg \
+            --extra-cflags="-I/usr/local/cuda/include -I/usr/local/include" \
+            --extra-ldflags="-L/usr/local/cuda/lib64 -L/usr/local/lib -Wl,-rpath,/opt/ffmpeg/lib:/usr/local/lib" \
+            --enable-gpl \
+            --enable-version3 \
+            --enable-libvmaf \
+            --enable-cuda-nvcc \
+            --enable-cuvid \
+            --enable-nvenc \
+            --enable-nvdec \
+            --enable-libx264 \
+            --enable-libx265 \
+            --enable-libsvtav1 \
+            --enable-libdav1d \
+            --enable-libopus \
+            --nvccflags="${NVCC_GENCODE}" \
+    && make -j"$(nproc)" \
+    && make install
+
+# Sanity checks inside build stage — fail the build if features missing.
+RUN set -eux; \
+    /opt/ffmpeg/bin/ffmpeg -hide_banner -filters | grep -E '\blibvmaf\b'; \
+    /opt/ffmpeg/bin/ffmpeg -hide_banner -filters | grep -E '\blibvmaf_cuda\b'; \
+    /opt/ffmpeg/bin/ffmpeg -hide_banner -encoders | grep -q av1_nvenc; \
+    /opt/ffmpeg/bin/ffmpeg -hide_banner -encoders | grep -q hevc_nvenc
+
+############################################################
+# Stage 2: runtime
+############################################################
+FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION} AS runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+
+# Install runtime variants of the codec libs ffmpeg was linked against.
+# Using -dev packages here keeps the image robust across Ubuntu point releases
+# (runtime soname suffixes change between LTS revisions). ~40MB overhead is fine.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libx264-dev libx265-dev libsvtav1-dev libsvtav1enc-dev \
+        libdav1d-dev libopus-dev libnuma1 ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# ffmpeg/ffprobe binaries
+COPY --from=build /opt/ffmpeg/bin/ffmpeg  /usr/local/bin/ffmpeg
+COPY --from=build /opt/ffmpeg/bin/ffprobe /usr/local/bin/ffprobe
+
+# libvmaf shared library + VMAF models on disk
+COPY --from=build /usr/local/lib/libvmaf.so* /usr/local/lib/
+COPY --from=build /usr/local/share/vmaf /usr/local/share/vmaf
+
+RUN ldconfig
+
+ENV PATH="/usr/local/bin:${PATH}"
+# libcuda.so / libnvidia-* come from the host driver via the NVIDIA Container Runtime.
+
+LABEL org.opencontainers.image.source="https://github.com/feldjaeger/ffmpeg-vmaf-cuda"
+LABEL org.opencontainers.image.description="ffmpeg with libvmaf_cuda + NVENC, GPL build"
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
+
+ENTRYPOINT ["/usr/local/bin/ffmpeg"]
+CMD ["-version"]
