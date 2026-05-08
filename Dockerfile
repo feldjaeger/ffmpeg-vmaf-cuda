@@ -19,7 +19,7 @@ ARG UBUNTU_VERSION=24.04
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${UBUNTU_VERSION} AS build
 
 ARG FFMPEG_VERSION=n7.1.1
-ARG VMAF_VERSION=v3.0.0
+ARG VMAF_VERSION=v3.1.0
 ARG NV_CODEC_VERSION=n12.2.72.0
 # Single PTX-virtual gencode: ffmpeg's configure runs `nvcc -ptx ...` to test
 # cuda_nvcc support, and -ptx is incompatible with multiple gencode targets
