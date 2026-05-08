@@ -47,9 +47,14 @@ WORKDIR /src
 # Without this symlink, ld can't resolve transitive deps when ffmpeg's
 # configure links a test binary against libvmaf -> "undefined reference to
 # cuModuleLoadData" etc., which surfaces as a misleading
-# "libvmaf >= 2.0.0 not found using pkg-config" error. The stub satisfies
-# the link only — at runtime the host driver provides the real libcuda.so.1
-# via the NVIDIA Container Runtime.
+# "libvmaf >= 2.0.0 not found using pkg-config" error.
+#
+# The stub satisfies the link only — at runtime the host driver provides
+# the real libcuda.so.1 via the NVIDIA Container Runtime.
+#
+# Companion change: ffmpeg's --extra-ldflags also needs
+# `-Wl,-rpath-link,/usr/local/cuda/lib64/stubs`. Plain `-L` paths are NOT
+# searched by ld for DT_NEEDED transitive lookup — only -rpath-link is.
 RUN ln -sf libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1
 
 # NVENC/NVDEC headers
@@ -96,7 +101,7 @@ RUN git clone --depth 1 --branch ${FFMPEG_VERSION} \
     && (./configure \
             --prefix=/opt/ffmpeg \
             --extra-cflags="-I/usr/local/cuda/include -I/usr/local/include" \
-            --extra-ldflags="-L/usr/local/cuda/lib64 -L/usr/local/cuda/lib64/stubs -L/usr/local/lib -Wl,-rpath,/opt/ffmpeg/lib:/usr/local/lib" \
+            --extra-ldflags="-L/usr/local/cuda/lib64 -L/usr/local/cuda/lib64/stubs -L/usr/local/lib -Wl,-rpath-link,/usr/local/cuda/lib64/stubs -Wl,-rpath,/opt/ffmpeg/lib:/usr/local/lib" \
             --enable-gpl \
             --enable-version3 \
             --enable-nonfree \
