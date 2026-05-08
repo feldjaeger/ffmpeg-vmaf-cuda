@@ -24,8 +24,13 @@ compiler) is gated on it — without it ffmpeg's configure refuses. libnpp
 and libfdk-aac are still omitted; libfdk-aac in particular is unneeded
 because audio is always copy-passthrough in the FileFlows pipeline.
 
-NVCC gencode covers Turing (sm_75), Ampere (sm_86), Ada (sm_89) and Hopper
-(sm_90) plus a `compute_89` PTX for forward compat.
+NVCC gencode is a single `compute_75` PTX (virtual). At container-start the
+NVIDIA driver JIT-compiles the PTX to whatever physical GPU is present, so
+this image runs on every Turing-or-newer GPU (sm_75 / Turing through
+sm_90 / Hopper, including the RTX 4060 / sm_89 used by the FileFlows host).
+The single-virtual-arch form is required because ffmpeg's `configure`
+runs `nvcc -ptx` to test cuda_nvcc support, and `-ptx` rejects multiple
+gencode targets.
 
 ## Pull
 
