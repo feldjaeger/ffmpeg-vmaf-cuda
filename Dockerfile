@@ -123,9 +123,18 @@ RUN git clone --depth 1 --branch ${FFMPEG_VERSION} \
     && make install
 
 # Sanity checks inside build stage — fail the build if features missing.
+#
+# ffmpeg itself links against libvmaf.so, which has DT_NEEDED libcuda.so.1.
+# Inside the GH-hosted build container there's no NVIDIA driver and the
+# default linker search paths don't include the CUDA stubs dir, so without
+# LD_LIBRARY_PATH ffmpeg fails to start with a missing-libcuda error.
+# At runtime in production, the NVIDIA Container Runtime injects the real
+# libcuda.so.1 from the host driver, so this LD_LIBRARY_PATH workaround is
+# only needed for the in-build verification.
 RUN set -eux; \
-    /opt/ffmpeg/bin/ffmpeg -hide_banner -filters | grep -E '\blibvmaf\b'; \
-    /opt/ffmpeg/bin/ffmpeg -hide_banner -filters | grep -E '\blibvmaf_cuda\b'; \
+    export LD_LIBRARY_PATH="/usr/local/cuda/lib64/stubs:${LD_LIBRARY_PATH:-}"; \
+    /opt/ffmpeg/bin/ffmpeg -hide_banner -filters  | grep -E '\blibvmaf\b'; \
+    /opt/ffmpeg/bin/ffmpeg -hide_banner -filters  | grep -E '\blibvmaf_cuda\b'; \
     /opt/ffmpeg/bin/ffmpeg -hide_banner -encoders | grep -q av1_nvenc; \
     /opt/ffmpeg/bin/ffmpeg -hide_banner -encoders | grep -q hevc_nvenc
 
